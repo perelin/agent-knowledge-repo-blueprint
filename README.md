@@ -6,12 +6,14 @@ a git repo of plain markdown that agents use to operate your servers, self-hoste
 services, apps, home devices and SaaS APIs.
 
 The structure follows the
-[Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+[Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
 
 - **Operative layer** — `AGENTS.md` (+ `CLAUDE.md` symlink) per repo and per domain:
   danger zones, access, common operations. Auto-loaded by the agent.
 - **Knowledge layer** — one markdown concept per topic, with YAML frontmatter
-  (`type`, `resource`, `status`, …). Read on demand.
+  (`type`, `resource`, `status`, …) plus OKF v0.2 provenance — who wrote a concept
+  (`generated`), who confirmed it (`verified`), where it comes from (`sources`).
+  Read on demand.
 - **Navigation layer** — generated `index.md` files for progressive disclosure.
 
 Plus a secrets pattern (secret store as source of truth, `.env` files restored

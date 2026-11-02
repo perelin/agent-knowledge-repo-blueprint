@@ -4,8 +4,8 @@ title: Agent Knowledge Repo — Bootstrap Guide
 description: Self-contained, shareable instructions for an AI agent to set up a personal "agents" knowledge repo — an Open Knowledge Format bundle with domains, operative AGENTS.md files, generated indexes, and a secrets-restore pattern.
 resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
 tags: [okf, bootstrap, meta, shareable]
-timestamp: 2026-10-05T00:00:00Z
-status: active
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T14:09:00Z }
+status: stable
 ---
 
 # Agent Knowledge Repo — Bootstrap Guide
@@ -20,7 +20,7 @@ status: active
 
 A git repository of plain markdown that any agent runtime can read, with no
 proprietary tooling. It follows the
-[Open Knowledge Format (OKF v0.1)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+[Open Knowledge Format (OKF v0.2)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
 a tree of markdown files with YAML frontmatter.
 
 Three layers coexist. Keep them separate:
@@ -41,9 +41,9 @@ Why this shape works:
   zones are always in context.
 - Knowledge is split into small typed concepts, so an agent reads only what the
   task needs (root `AGENTS.md` → domain `AGENTS.md` → domain `index.md` → one concept).
-- Frontmatter (`type`, `resource`, `status`, `tags`) makes the tree queryable
-  without parsing prose.
-- Superseded knowledge is marked `status: legacy`, not deleted, so history is
+- Frontmatter (`type`, `resource`, `status`, `tags`, `generated`) makes the tree
+  queryable without parsing prose, including who wrote a concept and when.
+- Superseded knowledge is marked `status: deprecated`, not deleted, so history is
   preserved but clearly separated from what is live.
 
 ## 2. Bootstrap sequence
@@ -68,7 +68,8 @@ Do these in order. Ask the user before step 8 which systems to cover first.
 5. Write `.okfignore` and `.gitignore` from [section 7](#7-tooling-embed-verbatim).
 6. Write the root `AGENTS.md` from the [template](#41-root-agentsmd), then
    `ln -s AGENTS.md CLAUDE.md`. Always edit `AGENTS.md`, never the symlink.
-7. Write the root `index.md` (hand-maintained, first line `<!-- okf:manual -->`)
+7. Write the root `index.md` (hand-maintained: `okf_version` frontmatter, then the
+   `<!-- okf:manual -->` marker)
    and `glossary.md` (`type: Glossary`) — templates in [section 4](#4-templates).
 8. Create the first domain using the [worked example](#5-worked-example-domain)
    as the shape. Store its credentials per [section 6](#6-secrets-and-multi-machine-sync).
@@ -88,8 +89,9 @@ Port this section into `docs/okf/conventions.md`.
 
 ### 3.1 Frontmatter
 
-Every non-reserved `.md` MUST start with a YAML frontmatter block containing a
-non-empty `type`.
+Every non-reserved `.md` MUST start with a YAML frontmatter block that parses as
+YAML and contains a non-empty `type`. Quote values containing `: ` or starting with
+a backtick (`access: "Bearer token (header Authorization: Bearer)"`).
 
 ```yaml
 ---
@@ -98,14 +100,31 @@ title: Photo Library         # recommended — display name (used by generate-in
 description: One sentence.   # recommended — shown in the generated index.md
 resource: https://photos.example.com   # recommended — URI of the underlying asset
 tags: [photos, self-hosted]  # recommended
-timestamp: 2026-01-01T00:00:00Z        # recommended — ISO 8601 last-modified
-status: active               # extension — active | legacy | deprecated | planned
-access: API key (X-API-Key)  # extension — how the asset is reached (never the secret itself)
+generated: { by: claude-code/opus-5.5, at: 2026-01-01T12:00:00Z }  # who last wrote it, when
+status: stable               # OKF — draft | stable | deprecated (absent = stable)
+access: "API key (header X-API-Key)"  # extension — how the asset is reached (never the secret)
 ---
 ```
 
-`status` and `access` are custom extension keys (OKF allows them; consumers keep
-unknown keys).
+`access` and `subject_status` are custom extension keys (OKF allows them; consumers
+keep unknown keys).
+
+**Provenance and trust (OKF v0.2).**
+
+- `generated: { by, at }` — set on every meaningful change. `by` is an *actor*:
+  `<harness>/<model>` for an agent (`claude-code/opus-5.5`), `agent/unknown` if not
+  recorded, `process:<id>` for a script that writes the file, `human:<id>` for the
+  owner. `at` is an ISO 8601 datetime **with offset**.
+- `verified: { by, at }` (or a list of them) — only for a real confirmation against
+  the source or live system, never as a side effect of writing. A `human:` verifier
+  makes the concept *human-reviewed*; never use `human:` for agent-written content.
+- `status` — the concept's own lifecycle: `stable` (default), `draft`, `deprecated`.
+  The state of the *thing* described (a retired server, a published post) goes into
+  the extension key `subject_status`.
+- `stale_after: <datetime>` — only where a real expiry exists (review cadence,
+  revisit date).
+- `sources:` — list of `{ id, resource, title }` the content comes from; attribute a
+  single claim with a footnote keyed by the id (`…[^api-docs]`).
 
 ### 3.2 Type taxonomy
 
@@ -148,9 +167,9 @@ Each domain has a **primary concept** named after the directory
 - **`docs/` subfolder:** longer standalone material (runbooks, investigations,
   troubleshooting) may live in `<domain>/docs/`; it still needs frontmatter.
 - **Point-in-time figures** (counts, versions) are written "as of `<date>`" and
-  backed by `timestamp`. They are not `legacy`; they are dated.
-- **Legacy:** mark superseded content `status: legacy` and keep it. First lift
-  any still-true facts into an active concept.
+  backed by `generated.at`. They are not `deprecated`; they are dated.
+- **Deprecation:** mark superseded content `status: deprecated` and keep it. First
+  lift any still-true facts into a current concept.
 - **AGENTS.md is operative only:** danger zones, access, common one-liners,
   pointers. Knowledge belongs in concepts, never duplicated into `AGENTS.md`.
 
@@ -158,8 +177,9 @@ Each domain has a **primary concept** named after the directory
 
 - **`index.md`** — directory listing, **no frontmatter**. Generated by
   `docs/okf/generate-index.sh`; do not hand-edit. Exception: a file whose first
-  line is `<!-- okf:manual -->` is hand-maintained and skipped by the generator
-  (use this for the root `index.md`).
+  line (after optional frontmatter) is `<!-- okf:manual -->` is hand-maintained and
+  skipped by the generator (use this for the root `index.md`). The root `index.md`
+  is also the one index allowed frontmatter: `okf_version: "0.2"`.
 - **`log.md`** — optional per-domain change history, **no frontmatter**, newest
   first, `## YYYY-MM-DD — <what>` headings. Record what git does not show:
   the starting question, findings, what was changed, and corrections of earlier
@@ -173,13 +193,16 @@ relative (`./other.md`) is allowed. Avoid broken links.
 
 ### 3.7 Conventional body sections
 
-`# Schema` (structured fields), `# Examples` (runnable snippets), `# Citations`
-(numbered external sources).
+`# Schema` (structured fields), `# Examples` (runnable snippets). Sources go into
+the `sources` frontmatter, not into a body `# Citations` list (superseded in v0.2).
 
 ### 3.8 Conformance
 
-Conformant = every non-reserved `.md` has parseable frontmatter with a non-empty
-`type`, and `index.md` / `log.md` have none. Check with `docs/okf/validate.sh`.
+Conformant = every non-reserved `.md` has parseable YAML frontmatter with a non-empty
+`type`, and `index.md` / `log.md` have none (except `okf_version` on the root
+`index.md`). Check with `docs/okf/validate.sh`; with PyYAML installed it also enforces
+the v0.2 field rules (no `timestamp`, `status` enum, `generated.by`, datetimes with
+offset, `resource` on every `sources` entry).
 
 ## 4. Templates
 
@@ -238,6 +261,9 @@ generated index.md files; this AGENTS.md is the operative layer.
 ### 4.2 Root `index.md`
 
 ```markdown
+---
+okf_version: "0.2"
+---
 <!-- okf:manual -->
 # Agents Knowledge Base
 
@@ -299,9 +325,9 @@ title: <System>
 description: <one sentence — appears in the generated index>
 resource: https://<system>.example.com
 tags: [<topic>, self-hosted]
-timestamp: <ISO 8601>
-status: active
-access: <auth scheme, never the secret>
+generated: { by: <actor>, at: <ISO 8601 datetime with offset> }
+status: stable
+access: "<auth scheme, never the secret>"
 ---
 
 # <System>
@@ -454,8 +480,13 @@ edits leaves every tree permanently dirty and blocks fast-forward syncs.
 ```bash
 #!/usr/bin/env bash
 # OKF conformance validator for this repo.
-#   - non-reserved *.md must start with YAML frontmatter containing a non-empty `type`
-#   - reserved index.md / log.md must NOT have frontmatter
+#   - non-reserved *.md must start with *parseable* YAML frontmatter containing a non-empty `type`
+#     (full YAML parse needs PyYAML; without it, falls back to a line-regex check and warns)
+#   - OKF v0.2 field rules (with PyYAML): no legacy `timestamp`; `status` in
+#     draft|stable|deprecated; `generated.by` present; `generated.at`, `verified[].at`,
+#     `stale_after` are datetimes with a UTC offset; every `sources` entry has a `resource`
+#   - reserved index.md / log.md must NOT have frontmatter — except the bundle-root
+#     index.md, which may carry `okf_version` only
 # Honors .okfignore (glob patterns, repo-relative). Exit 1 on any violation.
 # Usage: docs/okf/validate.sh [scope-subdir]   (default = whole bundle)
 set -euo pipefail
@@ -464,7 +495,11 @@ cd "$ROOT"
 SCOPE="${1:-}"
 
 python3 - "$ROOT" "$SCOPE" <<'PY'
-import os, sys, fnmatch, re
+import os, sys, fnmatch, re, datetime
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 root = sys.argv[1]
 scope = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -486,7 +521,84 @@ def ignored(rel):
 def has_frontmatter(text):
     return text.startswith("---\n") or text.startswith("---\r\n")
 
+def frontmatter_block(text):
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[1:i])
+    return None
+
+def yaml_check(text):
+    """Return an error string, or None. Requires PyYAML."""
+    block = frontmatter_block(text)
+    if block is None:
+        return "frontmatter block is not closed with ---"
+    try:
+        data = yaml.safe_load(block)
+    except yaml.YAMLError as e:
+        mark = getattr(e, "problem_mark", None)
+        where = f" (frontmatter line {mark.line + 1})" if mark else ""
+        return f"frontmatter is not parseable YAML{where}: {getattr(e, 'problem', e)}"
+    if not isinstance(data, dict):
+        return "frontmatter is not a YAML mapping"
+    t = data.get("type")
+    if not isinstance(t, str) or not t.strip():
+        return "frontmatter has no non-empty string `type`"
+    problems = v02_problems(data)
+    return "; ".join(problems) if problems else None
+
+STATUSES = ("draft", "stable", "deprecated")
+
+def is_aware_datetime(v):
+    return isinstance(v, datetime.datetime) and v.tzinfo is not None
+
+def v02_problems(d):
+    p = []
+    if "timestamp" in d:
+        p.append("legacy `timestamp` — use `generated: { by: <actor>, at: <datetime> }` (OKF v0.2)")
+    if "status" in d and d["status"] not in STATUSES:
+        p.append(f"`status: {d['status']}` is not one of {'|'.join(STATUSES)} (repo detail goes in `subject_status`)")
+    if "generated" in d:
+        g = d["generated"]
+        if not isinstance(g, dict) or not isinstance(g.get("by"), str) or not g["by"].strip():
+            p.append("`generated` needs a non-empty `by` actor")
+        elif "at" in g and not is_aware_datetime(g["at"]):
+            p.append("`generated.at` must be an ISO 8601 datetime with offset (e.g. 2026-11-02T00:00:00Z)")
+    if "verified" in d:
+        vs = d["verified"] if isinstance(d["verified"], list) else [d["verified"]]
+        for v in vs:
+            if not isinstance(v, dict) or not isinstance(v.get("by"), str) or not is_aware_datetime(v.get("at")):
+                p.append("each `verified` entry needs `by` (actor) and `at` (datetime with offset)")
+                break
+    if "stale_after" in d and not is_aware_datetime(d["stale_after"]):
+        p.append("`stale_after` must be an ISO 8601 datetime with offset")
+    if "sources" in d:
+        ss = d["sources"]
+        if not isinstance(ss, list) or not all(isinstance(x, dict) and x.get("resource") for x in ss):
+            p.append("every `sources` entry needs a `resource`")
+    return p
+
+def root_index_problem(text):
+    """Bundle-root index.md may carry frontmatter with `okf_version` only."""
+    block = frontmatter_block(text)
+    if block is None:
+        return "frontmatter block is not closed with ---"
+    if yaml is None:
+        return None
+    try:
+        data = yaml.safe_load(block)
+    except yaml.YAMLError:
+        return "frontmatter is not parseable YAML"
+    if not isinstance(data, dict) or set(data) - {"okf_version"}:
+        return "root index.md frontmatter may only carry `okf_version`"
+    if not isinstance(data.get("okf_version"), str):
+        return "`okf_version` must be a quoted string, e.g. \"0.2\""
+    return None
+
 def frontmatter_type(text):
+    # extract block between first two --- lines, find a non-empty top-level `type:`
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return None
@@ -519,14 +631,25 @@ for dirpath, dirnames, filenames in os.walk(walk_root):
         text = open(full, encoding="utf-8").read()
         if fn in ("index.md", "log.md"):
             if has_frontmatter(text):
-                errors.append(f"{rel}: reserved file must NOT have frontmatter")
+                if rel == "index.md":
+                    err = root_index_problem(text)
+                    if err:
+                        errors.append(f"{rel}: {err}")
+                else:
+                    errors.append(f"{rel}: reserved file must NOT have frontmatter")
         else:
             if not has_frontmatter(text):
                 errors.append(f"{rel}: missing YAML frontmatter")
+            elif yaml is not None:
+                err = yaml_check(text)
+                if err:
+                    errors.append(f"{rel}: {err}")
             elif not frontmatter_type(text):
                 errors.append(f"{rel}: frontmatter has no non-empty `type`")
 
 print(f"OKF validate: checked {checked} markdown files")
+if yaml is None:
+    print("WARN — PyYAML not installed: frontmatter only regex-checked, not parsed (pip install pyyaml)")
 if errors:
     print(f"FAIL — {len(errors)} violation(s):")
     for e in errors:
@@ -542,7 +665,7 @@ PY
 #!/usr/bin/env bash
 # Regenerate index.md files across the OKF bundle from concept frontmatter.
 #   - lists non-reserved concepts (title + description) and subdirectories
-#   - skips any index.md whose first line is "<!-- okf:manual -->"
+#   - skips any index.md whose first line (after optional frontmatter) is "<!-- okf:manual -->"
 #   - honors .okfignore; never writes frontmatter into index.md
 # Usage: docs/okf/generate-index.sh [--check] [scope-subdir]
 #   --check       fail if any index.md is stale instead of writing
@@ -576,6 +699,14 @@ def ignored(rel):
             return True
     return False
 
+def unquote(v):
+    """Resolve a quoted YAML scalar ("..." with \\ escapes, '...' with '' escapes)."""
+    if len(v) >= 2 and v[0] == v[-1] == '"':
+        return re.sub(r'\\(.)', lambda m: m.group(1), v[1:-1])
+    if len(v) >= 2 and v[0] == v[-1] == "'":
+        return v[1:-1].replace("''", "'")
+    return v
+
 def fm(text):
     """Return dict of top-level scalar frontmatter fields (title/description/type)."""
     out = {}
@@ -587,7 +718,7 @@ def fm(text):
             for l in lines[1:i]:
                 m = re.match(r"^(\w+):\s*(.*)$", l)
                 if m:
-                    out[m.group(1)] = m.group(2).strip().strip('"\'')
+                    out[m.group(1)] = unquote(m.group(2).strip())
             break
     return out
 
@@ -614,14 +745,21 @@ for dirpath, rel, dirnames, filenames in concept_dirs():
                 return True
         return False
     subdirs = [d for d in dirnames if has_md(os.path.join(dirpath, d))]
+    # only generate where there is something to list
     if not concepts and not subdirs:
         continue
     index_path = os.path.join(dirpath, "index.md")
     if os.path.exists(index_path):
-        first = open(index_path, encoding="utf-8").readline().strip()
+        body = open(index_path, encoding="utf-8").read()
+        # the bundle-root index.md may carry frontmatter (okf_version); look past it
+        fmm = re.match(r"---\n.*?\n---\n", body, re.S)
+        if fmm:
+            body = body[fmm.end():]
+        first = body.lstrip("\n").split("\n", 1)[0].strip()
         if first == "<!-- okf:manual -->":
             continue
 
+    # heading: prefer the primary concept named after the dir, else title-case
     dirname = os.path.basename(dirpath) if rel != "." else "Knowledge Base"
     heading = title_case(dirname)
     primary = os.path.join(dirpath, dirname + ".md")
@@ -679,8 +817,11 @@ These are what keep the repo trustworthy over time. Put them in the root `AGENTS
   query. Logs and history prove *events*, not current state. Before writing "X does
   not exist" into a concept, look at the unfiltered raw object once. Label anything
   unverified as unverified.
-- **Never delete superseded knowledge** — mark it `status: legacy` after lifting
+- **Never delete superseded knowledge** — mark it `status: deprecated` after lifting
   live facts out.
+- **Record who wrote it.** Every concept edit updates `generated: { by, at }` with
+  the agent's own actor; only the owner's explicit confirmation becomes
+  `verified: { by: human:<id>, … }`.
 - **Danger zones are written once the hard way.** After any incident or near-miss,
   add a one-line danger zone to the domain `AGENTS.md` that names the trap and the
   safe alternative.
